@@ -1,8 +1,11 @@
 'use strict';
 // Packages
 require('dotenv').config({ path: './.env.development' });
+const cookieParser = require('cookie-parser')
 const express = require('express');
+const connectMongo = require('connect-mongo')
 const passport = require('passport')
+const passportSocketIo = require('passport.socketio')
 const session = require('express-session')
 // Helpers
 const authentication = require('./auth')
@@ -14,6 +17,31 @@ const routes = require('./routes')
 const app = express();
 const http = require('http').createServer(app)
 const io = require('socket.io')(http)
+
+// Create a mongo session and store to track who is connected to our web socket
+const MongoStore = connectMongo(session)
+const URI = process.env.MONGO_URI
+const store = new MongoStore({ url: URI }) // This is a MemoryStore
+// Very similar to connecting initializing our Express session
+io.use(
+        // .authorize gets the session id from the cookie and validates it
+        // appends .request.user to socket
+        passportSocketIo.authorize({
+                cookieParser,
+                key: 'express.sid', // Needs to match Express session cookie key
+                secret: process.env.SESSION_SECRET,
+                store,
+                success: (data, accept) => {
+                        console.log('successful connection to socket.io')
+                        accept(null, true)
+                },
+                fail: (data, message, error, accept) => {
+                        if (error) throw new Error(message)
+                        console.log('failed connection to socket.io:', message)
+                        accept(null, false)
+                },
+        })
+)
 
 fccTesting(app); //For FCC testing purposes
 
@@ -34,9 +62,11 @@ app.use(session({
                 // Using HTTP not HTTPS
                 secure: false,
         },
+        name: 'express.sid',
         resave: true,
         saveUninitialized: true,
         secret: process.env.SESSION_SECRET,
+        store,
 }))
 app.use(passport.initialize())
 app.use(passport.session())
@@ -47,12 +77,31 @@ connection(async (client) => {
 
         let currentUsers = 0
         io.on('connection', (socket) => {
-                currentUsers++
-                io.emit('user count', currentUsers)
+                const username = socket.request.user.username
 
-                socket.on('disconnect', () => {
+                console.log(`user ${username} + connected`)
+                currentUsers++
+                io.emit('user', {
+                        connected: true,
+                        currentUsers,
+                        username,
+                })
+
+                socket.on('disconnect', (reason) => {
+                        console.log('socket disconnected: ', reason)
                         currentUsers--
-                        io.emit('user count', currentUsers)
+                        io.emit('user', {
+                                connected: false,
+                                currentUsers,
+                                username,
+                        })
+                })
+
+                socket.on('chat message', (message) => {
+                        io.emit('chat message', {
+                                message,
+                                username,
+                        })
                 })
         })
 

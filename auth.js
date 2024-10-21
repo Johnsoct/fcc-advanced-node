@@ -1,4 +1,4 @@
-// Packages
+// Packages 
 const bcrypt = require('bcrypt')
 const GitHubStrategy = require('passport-github')
 const LocalStrategy = require('passport-local')
@@ -23,7 +23,6 @@ function authentication (db) {
                         callbackURL: 'http://localhost:8080/auth/github/callback',
                 },
                 function (accessToken, refreshToken, profile, cb) {
-                        console.log(profile)
                         db.findOneAndUpdate(
                                 { id: profile.id },
                                 {
