@@ -2,15 +2,18 @@
 // Packages
 require('dotenv').config({ path: './.env.development' });
 const express = require('express');
-const LocalStrategy = require('passport-local')
-const { ObjectId } = require('mongodb')
 const passport = require('passport')
 const session = require('express-session')
 // Helpers
+const authentication = require('./auth')
 const connection = require('./connection');
 const fccTesting = require('./freeCodeCamp/fcctesting.js');
+const routes = require('./routes')
+
 
 const app = express();
+const http = require('http').createServer(app)
+const io = require('socket.io')(http)
 
 fccTesting(app); //For FCC testing purposes
 
@@ -35,66 +38,39 @@ app.use(session({
         saveUninitialized: true,
         secret: process.env.SESSION_SECRET,
 }))
-passport.initialize()
-passport.session()
+app.use(passport.initialize())
+app.use(passport.session())
 
-
+console.log(authentication)
 connection(async (client) => {
         const db = await client.db('test').collection('users')
 
-        passport.use(new LocalStrategy((username, password, done) => {
-                db.findOne({ username }, (err, user) => {
-                        console.log(`User ${username} attempted to log in.`)
-                        if (err) return done(err)
-                        if (!user) return done(null, false)
-                        if (password !== user.password) return done(null, false)
-                        return done(null, user)
-                })
-        }))
+        let currentUsers = 0
+        io.on('connection', (socket) => {
+                currentUsers++
+                io.emit('user count', currentUsers)
 
-        passport.serializeUser((user, done) => {
-                done(null, user._id)
-        })
-        passport.deserializeUser((uniqueKey, done) => {
-                db.findOne(
-                        { _id: new ObjectId(uniqueKey) },
-                        (err, doc) => {
-                                done(null, doc)
-                        }
-                )
-        })
-
-        app.route('/').get((req, res) => {
-                res.render('index', {
-                        message: 'Please login',
-                        showLogin: true,
-                        title: 'Connected to Database',
-                })
-        });
-
-        app.post(
-                '/login', 
-                passport.authenticate('local', { failureRedirect: '/' }),
-                (req, res, next) => {
-                        res.redirect('/profile')
-                }
-        )
-
-        app.get('/profile', (req, res) => {
-                res.render(profile, {
-
+                socket.on('disconnect', () => {
+                        currentUsers--
+                        io.emit('user count', currentUsers)
                 })
         })
+
+        authentication(db)
+        routes(app, db)
+
 }).catch((error) => {
-                app.route('/').get((req, res) => {
+        app
+                .route('/')
+                .get((req, res) => {
                         res.render('index', {
                                 title: error,
                                 message: 'Unable to connect to database',
                         })
                 })
-        })
+})
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+http.listen(PORT, () => {
         console.log('Listening on port ' + PORT);
 });
