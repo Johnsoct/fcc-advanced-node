@@ -13,12 +13,8 @@ $(document).ready(function () {
         })
 
         socket.on('chat message', (data) => {
-                console.log('socket.on 1')
-                $('#messages').append($('<li>').text(`${data.username}: ${data.message}`));
-        })
-
-        socket.on('disconnect', function () {
-                console.log('MF\'er disconnected')
+                const message = `${data.username} : ${data.message}`
+                appendMessage(message)
         })
 
         // Form submittion with new message in field with id 'm'
