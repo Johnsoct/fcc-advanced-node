@@ -1,4 +1,5 @@
 // Packages
+const bcrypt = require('bcrypt')
 const passport = require('passport')
 // Helpers
 const ensureAuthenticated = require('./routeGuard')
@@ -40,8 +41,8 @@ function routes (app, db) {
                 .route('/login')
                 .post(
                         passport.authenticate('local', {
-                                failureRedirect: '/login', 
-                                successRedirect: '/profile' 
+                                failureRedirect: '/login',
+                                successRedirect: '/chat',
                         })
                 )
 
@@ -50,8 +51,8 @@ function routes (app, db) {
                 .post(
                         (req, res, next) => {
                                 // Register the new user
-                                const password = req.body.password
-                                const username = bcrypt.hashSync(req.body.username, 12)
+                                const password = bcrypt.hashSync(req.body.password, 12)
+                                const username = req.body.username
 
                                 db.findOne({ username }, (err, user) => {
                                         if (err) next(err)
